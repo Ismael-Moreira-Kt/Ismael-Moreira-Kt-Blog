@@ -9,3 +9,10 @@ github_username: Ismael-Moreira-Kt
 theme: minima
 plugins:
   - jekyll-feed
+
+defaults:
+  scope: 
+    path: "posts"
+  values:
+    layout: "post"
+    author: "Ismael-Moreira-Kt"
