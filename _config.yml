@@ -1,10 +1,11 @@
 title: Ismael-Moreira-Kt
 email: ismaelmoreira363@gmail.com
-description: >- This is a blog I created so that I could talk about some of the things I study and enjoy.
+description: "This is a blog I created so that I could talk about some of the things I study and enjoy."
 baseurl: "/Ismael-Moreira-Kt-Blog"
 url: "https://ismael-moreira-kt.github.io/Ismael-Moreira-Kt-Blog/"
 twitter_username: IsmaelM_Kt
-github_username:  Ismael-Moreira-Kt
+github_username: Ismael-Moreira-Kt
+
 theme: minima
 plugins:
   - jekyll-feed
