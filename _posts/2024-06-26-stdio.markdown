@@ -13,7 +13,7 @@ Neste post, vou explorar como as bibliotecas stdio, ou standard input/output, fu
 
 Antes de começarmos, quero que tenham este código em mente para depois compararmos com a simplicidade e eficiência da biblioteca que vamos criar. Este é o script mais tradicional de todos: a simples leitura de um nome e a impressão de um "Olá" para o nome introduzido. É a primeira lição de programação que qualquer pessoa faz, logo após o clássico e universal "Hello World!".
 
-``nasm
+```nasm
 section .bss
     name resb 100
 
