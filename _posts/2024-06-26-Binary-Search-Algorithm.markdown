@@ -1,0 +1,544 @@
+---
+
+layout: post
+title: Como funcionam as bibliotecas STDio
+date: 2024-06-26 20:00:00 +0100
+categories: NASM, Assembly
+
+---
+
+
+Olá a todos, o meu nome é Ismael. <br>
+Neste post, vou explorar como as bibliotecas stdio, ou standard input/output, funcionam no seu nível mais básico. Para isso, vamos desenvolver uma biblioteca simples em Assembly, aproveitando para aprender mais sobre esta linguagem ao longo do caminho. Nos meus artigos sobre funções de baixo nível em Assembly, irei utilizar o montador NASM para a arquitetura x86-64. <br><br>
+
+Antes de começarmos, quero que tenham este código em mente para depois compararmos com a simplicidade e eficiência da biblioteca que vamos criar. Este é o script mais tradicional de todos: a simples leitura de um nome e a impressão de um "Olá" para o nome introduzido. É a primeira lição de programação que qualquer pessoa faz, logo após o clássico e universal "Hello World!".
+
+``nasm
+section .bss
+    name resb 100
+
+section .data
+    message db "Hello, ", 0
+    message_len equ $ - message
+
+section .text
+    global _start
+
+_start:
+    mov rax, 0
+    mov rdi, 0
+    mov rsi, name
+    mov rdx, 100
+    syscall
+
+    mov rdi, name
+    mov rcx, -1
+    xor al, al
+    repne scasb
+    not rcx
+    dec rcx 
+    mov rbx, rcx
+
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, message
+    mov rdx, message_len
+    syscall
+
+    mov rax, 1 
+    mov rdi, 1
+    mov rsi, name
+    mov rdx, rbx
+    syscall
+
+    mov rax, 60
+    xor rdi, rdi
+    syscall
+```
+
+Pode parecer confuso à primeira vista, mas como tudo na vida, e como dizia o nosso ídolo Jack, o Estripador, vamos por partes.
+
+```nasm 
+section .bss
+    name resb 100
+```
+
+No NASM 64 bits, usamos a secção .bss para declarar variáveis que não têm um valor inicial definido. Como queremos que o utilizador introduza o seu nome, vamos manter a variável name dentro desta secção.
+
+```nasm
+section .data
+    message db "Hello, ", 0
+    message_len equ $ - message
+```
+
+Depois, vem a secção .data, responsável por guardar variáveis já inicializadas. Nesta secção, guardamos o início da mensagem e o tamanho da mensagem. <br>
+
+A linha que define message_len pode parecer um pouco confusa, mas simplificando ao máximo: O símbolo $ representa o endereço atual. Portanto, esta linha diz o seguinte: "Pega o endereço atual e subtrai pelo endereço onde está a variável message." A string "Hello, ", que é o conteúdo da variável message, tem 8 bytes (7 para os caracteres representados e 1 para o valor nulo que indica o fim). Digamos que a variável message esteja no endereço 0x1000. Quando message_len é avaliada, ela está no endereço 0x1008. Ao subtrair o endereço atual (0x1008) pelo endereço onde começa message (0x1000), obtemos o número 8, que é o tamanho da string.
+
+```nasm
+_start:
+    mov rax, 0
+    mov rdi, 0
+    mov rsi, name
+    mov rdx, 100
+    syscall
+```
+
+Neste trecho, configuramos uma chamada de sistema para ler a entrada do utilizador. Definimos rax como 0 para indicar a operação de leitura (sys_read no Linux), rdi como 0 para especificar o stdin, rsi com o endereço da variável name, e rdx com o tamanho máximo de leitura (100 bytes). A instrução syscall então executa a leitura.
+
+```nasm
+    mov rdi, name
+    mov rcx, -1
+    xor al, al
+    repne scasb
+    not rcx
+    dec rcx
+    mov rbx, rcx
+```
+
+Aqui, procuramos o fim da string introduzida pelo utilizador. Primeiro, movemos o endereço da variável name para rdi. Configuramos rcx como -1 e zeramos o registo al. A instrução repne scasb compara cada byte da string com al (que é 0) até encontrar um byte nulo. Após encontrar o byte nulo, rcx é invertido (not rcx) e decrementado (dec rcx) para obter o comprimento correto da string. O resultado é então movido para rbx.
+
+```nasm
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, message
+    mov rdx, message_len
+    syscall
+```
+
+Neste trecho, configuramos uma chamada de sistema para escrever a mensagem "Hello, " no stdout. Definimos rax como 1 para indicar a operação de escrita (sys_write no Linux), rdi como 1 para especificar o stdout, rsi com o endereço da variável message, e rdx com o comprimento da mensagem. A instrução syscall então executa a escrita.
+
+```nasm
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, name
+    mov rdx, rbx
+    syscall
+```
+
+Aqui, configuramos uma chamada de sistema para escrever o nome introduzido pelo utilizador no stdout. Definimos rax como 1 para sys_write, rdi como 1 para stdout, rsi com o endereço da variável name, e rdx com o comprimento do nome armazenado em rbx. A instrução syscall então executa a escrita.
+
+```nasm
+    mov rax, 60
+    xor rdi, rdi
+    syscall
+```
+
+Finalmente, configuramos uma chamada de sistema para terminar o programa. Definimos rax como 60 para sys_exit, e zeramos rdi para retornar um código de saída 0. A instrução syscall então encerra o programa.
+
+
+<br><br>
+<hr>
+<br><br>
+
+
+## Standard Input
+
+Standard Input, como o nome sugere, é a entrada padrão do sistema. O que isso significa na prática? O **input** do Python, **cin** do C++ e **scanf** do C são todas abstrações do Standard Input do sistema. Através das funções de Standard Input, podemos ler entradas do utilizador e armazená-las em espaços na memória, também conhecidos como variáveis. <br><br>
+
+Para desenvolver uma função de stdin em Assembly, precisamos receber como parâmetros o endereço de uma variável e o tamanho dela. Utilizamos o syscall do sistema para armazenar o input do usuário dentro da variável. <br>
+Se você está se perguntando por que precisamos do tamanho da variável, pense da seguinte forma: se temos uma variável de 1 byte e tentamos escrever 2 bytes nela, isso pode corromper a memória. Portanto, usamos o tamanho da variável como uma "barreira" para garantir que escrevemos apenas até a quantidade de bytes que a variável suporta.
+
+```nasm
+section .text
+    global _stdin
+
+
+
+_stdin:
+    push rbp
+    mov rbp, rsp
+
+    mov rdx, rsi
+    mov rsi, rdi
+
+    mov rax, 0
+    mov rdi, 0
+    syscall
+
+    cmp rax, rdx      
+    jbe .exit
+    
+    mov rax, rdx
+
+
+.exit:
+    pop rbp
+    ret
+```
+
+<br>
+
+Vamos analisar este código passo a passo:
+
+```nasm
+_stdin:
+    push rbp
+    mov rbp, rsp
+```
+
+Inicialmente, o código configura o contexto da pilha local, preservando o valor do registo base (rbp) e definindo-o como o ponteiro atual da pilha (rsp).
+
+```nasm
+    mov rdx, rsi
+    mov rsi, rdi
+
+    mov rax, 0
+    mov rdi, 0
+```
+
+Nesta secção, os parâmetros de entrada da função são transferidos para os registos apropriados para serem utilizados na chamada de sistema subsequente. rsi e rdi são movidos para rdx e rsi, respetivamente, para preparar os argumentos da chamada de sistema. O registo rax é então configurado como 0, indicando a operação de leitura (sys_read no Linux), e rdi é definido como 0, que representa o descritor de ficheiro padrão para stdin.
+
+```nasm
+    syscall
+
+    cmp rax, rdx      
+    jbe .exit
+    
+    mov rax, rdx
+```
+
+A instrução syscall realiza a chamada de sistema para ler dados do stdin. Após a leitura, o valor retornado é armazenado em rax. O código então compara rax com rdx para verificar se o número de bytes lidos é menor ou igual ao valor especificado em rdx. Se for verdadeiro, o fluxo do programa continua para .exit. Caso contrário, rax é ajustado para rdx, possivelmente truncando a entrada do utilizador para atender ao limite especificado em rdx.
+
+```nasm
+.exit:
+    pop rbp
+    ret
+```
+
+Finalmente, no ponto .exit, o contexto da pilha é restaurado com pop rbp, removendo o quadro da pilha criado no início da função. A instrução ret é utilizada para retornar o controlo para o ponto de chamada original. <br><br>
+
+Mas essa não é a melhor solução. Pedir constantemente ao programador que passe o tamanho da variável é pedir por problemas de segmentação de memória mais cedo ou mais tarde. Em vez disso, podemos apenas solicitar o ponteiro para a variável, deixando a nossa biblioteca responsável por calcular o tamanho disponível, ler o input do utilizador e escrever o que foi recebido no espaço disponível. Vamos tentar implementar isso: 
+
+```nasm
+section .text
+    global _stdin
+
+
+
+_stdin:
+    push rbp
+    mov rbp, rsp
+    push rbx
+    push rsi
+    push rdi
+
+    mov rbx, rdi
+    mov rsi, rbx
+
+
+.stdin_loop:
+    mov rax, 0
+    mov rdi, 0
+    mov rdx, 1
+    syscall
+
+    cmp byte [rbx], 0x0A
+    je .stdin_end
+
+    inc rbx
+    inc rsi
+    jmp .stdin_loop
+
+
+.stdin_end:
+    mov byte [rbx], 0
+
+    pop rdi
+    pop rsi
+    pop rbx
+
+    mov rsp, rbp
+    pop rbp
+
+    ret
+```
+
+<br>
+
+Ok, vamos analisar esta solução para tirar-mos as nossas conclusões:
+
+```nasm
+section .text
+    global _stdin
+
+
+
+_stdin:
+    push rbp
+    mov rbp, rsp
+    push rbx
+    push rsi
+    push rdi
+```
+
+Este trecho inicializa a função _stdin. Primeiro, o contexto de pilha local é configurado, preservando o valor do registo base (rbp) e definindo-o como o ponteiro atual da pilha (rsp). Os registos rbx, rsi e rdi são salvos na pilha para preservar seus valores.
+
+```nasm
+    mov rbx, rdi
+    mov rsi, rbx
+```
+
+Os parâmetros de entrada da função são movidos para os registos rbx e rsi, que serão usados durante o processamento do stdin.
+
+```nasm
+.stdin_loop:
+    mov rax, 0
+    mov rdi, 0
+    mov rdx, 1
+    syscall
+```
+
+Aqui começa o loop principal de leitura (stdin_loop). O registo rax é configurado como 0 para indicar a operação de leitura (sys_read no Linux). rdi é definido como 0, indicando stdin como o descritor de ficheiro padrão. rdx é definido como 1, especificando que apenas um byte será lido por vez. A syscall é então invocada para realizar a leitura.
+
+```nasm
+    cmp byte [rbx], 0x0A
+    je .stdin_end
+
+    inc rbx
+    inc rsi
+    jmp .stdin_loop
+```
+
+Após a leitura, o código verifica se o byte lido é um newline (0x0A). Se for, o loop termina e o controle é transferido para .stdin_end. Caso contrário, os registos rbx (ponteiro para o buffer de entrada) e rsi (contador de bytes lidos) são incrementados, e o loop continua para ler o próximo byte.
+
+```nasm
+.stdin_end:
+    mov byte [rbx], 0
+
+    pop rdi
+    pop rsi
+    pop rbx
+
+    mov rsp, rbp
+    pop rbp
+
+    ret
+```
+
+No ponto .stdin_end, o byte nulo (0x00) é inserido no final da string lida para indicar o término da string. Os registos rbx, rsi e rdi são restaurados a partir da pilha. O contexto da pilha é então restaurado, movendo rsp de volta para rbp, e o registo rbp é restaurado da pilha. Finalmente, a instrução ret é utilizada para retornar ao ponto de chamada original.
+
+
+<br><br>
+<hr>
+<br><br>
+
+
+## Standard Output
+
+Agora que entendemos o que é e como implantar uma função de input, vamos ao output. <br><br>
+O Standard Output é, de forma simplificada, a saída padrão do sistema. É através dele que surgem abstrações como Print e Println do Go, console.log do Javascript e writeLn do Pascal. É através dessas funções que podemos exibir texto na linha de comandos. <br><br>
+Para criar as funções de stdout, temos que ter em conta duas coisas: primeiro, temos que receber como parâmetro o texto que vamos imprimir na linha de comando; depois, temos que decidir se queremos adicionar uma quebra de linha ou não. Para aprimorar ainda mais a nossa biblioteca, vamos criar a função _stdout que não adiciona a quebra de linha e _stdoutLn que sim adiciona essa quebra de linha. Por fim, temos que considerar se queremos retornar algo ou não. Neste caso específico, optei por não adicionar retorno às funções.
+
+```nasm
+section .data
+    newline db 0x0A
+
+
+
+
+
+section .text
+    global _stdout
+    global _stdoutLn
+
+
+
+_stdout:
+    mov rdi, rsi
+    call _strLen
+    mov rdx, rax
+
+    mov rax, 1
+    mov rdi, 1
+    syscall
+
+    ret
+
+
+
+_stdoutLn:
+    push rdi
+    call _strLen
+    pop rsi
+    mov rdx, rax
+
+    mov eax, 1
+    mov edi, 1
+    syscall
+
+    mov eax, 1
+    mov edi, 1
+    mov rsi, newline
+
+    mov rdx, 1
+    syscall
+    
+    ret
+
+
+
+_strLen:
+    xor rcx, rcx
+    not rcx
+
+    xor al, al
+    repne scasb
+    
+    not rcx
+    dec rcx
+    
+    mov rax, rcx
+
+    ret
+```
+
+Vamos voltar a fazer o exercício de revisar o código.
+
+```nasm
+section .data
+    newline db 0x0A
+```
+
+Aqui, é definida uma secção de dados onde um byte chamado newline é armazenado com o valor 0x0A, que representa o caractere de nova linha (newline).
+
+```nasm
+section .text
+    global _stdout
+    global _stdoutLn
+```
+
+Nesta secção de texto, as funções _stdout e _stdoutLn são declaradas como globais, tornando-as acessíveis de fora deste módulo.
+
+```nasm
+_stdout:
+    mov rdi, rsi
+    call _strLen
+    mov rdx, rax
+```
+
+Para começar, movemos o ponteiro da string para rdi com a instrução mov rdi, rsi. Em seguida, chamamos a função _strLen com call _strLen, que calcula o comprimento da string e coloca o resultado em rax. Finalmente, movemos esse comprimento para rdx usando mov rdx, rax.
+
+```nasm
+    mov rax, 1
+    mov rdi, 1
+    syscall
+
+    ret
+```
+
+Neste trecho, configuramos rax para a operação de escrita (sys_write) com mov rax, 1. Definimos rdi para o descritor de arquivo stdout com mov rdi, 1. A chamada de sistema é então invocada com syscall para escrever a string no stdout. Por fim, ret retorna da função.
+
+```nasm
+_stdoutLn:
+    push rdi
+    call _strLen
+    pop rsi
+    mov rdx, rax
+```
+
+Começamos salvando o valor de rdi na pilha com push rdi. Em seguida, chamamos a função _strLen para obter o comprimento da string usando call _strLen. Após a chamada, restauramos o ponteiro da string para rsi com pop rsi. Finalmente, movemos o comprimento da string, que está em rax, para rdx com mov rdx, rax.
+
+```nasm
+    mov eax, 1
+    mov edi, 1
+    syscall
+```
+
+Configuramos eax para a operação de escrita (sys_write) com mov eax, 1. Definimos edi para o descritor de arquivo stdout com mov edi, 1. A chamada de sistema é então invocada com syscall para escrever a string no stdout.
+
+```nasm
+    mov eax, 1
+    mov edi, 1
+    mov rsi, newline
+
+    mov rdx, 1
+    syscall
+    
+    ret
+```
+
+Configuramos eax para a operação de escrita (sys_write) com mov eax, 1. Definimos edi para o descritor de arquivo stdout com mov edi, 1. Apontamos rsi para o byte de nova linha definido em .data com mov rsi, newline. Configuramos rdx para escrever 1 byte com mov rdx, 1. A chamada de sistema é então invocada com syscall para escrever a nova linha no stdout. Finalmente, ret retorna da função.
+
+
+```nasm
+_strLen:
+    xor rcx, rcx
+    not rcx
+```
+
+Inicialmente, zeramos o registrador rcx com xor rcx, rcx. Em seguida, invertemos todos os bits de rcx com not rcx, configurando-o para o valor máximo, que será usado como contador.
+
+```nasm
+    xor al, al
+    repne scasb
+```
+
+Zeramos o registrador al, configurando-o para o byte nulo (0x00) com xor al, al. Usamos repne scasb para procurar o byte nulo na string apontada por rdi, decrementando rcx até encontrá-lo.
+
+```nasm
+    not rcx
+    dec rcx
+```
+
+Invertendo novamente todos os bits de rcx com not rcx, obtemos o valor correto para o comprimento da string. A instrução dec rcx então decrementa rcx para ajustar o comprimento corretamente, excluindo o byte nulo.
+
+```nasm
+    mov rax, rcx
+
+    ret
+```
+
+Movemos o comprimento da string para rax com mov rax, rcx. Por fim, a instrução ret retorna da função com o comprimento da string em rax.
+
+
+<br><br>
+<hr>
+<br><br>
+
+
+## Conclusão
+
+Para finalizar este primeiro post, gostaria de mostrar o quão poderosa é a biblioteca simples que criámos. Lembram-se do programa que imprime um "Olá" ao utilizador? Vamos refazê-lo utilizando a nossa nova biblioteca.
+
+```nasm
+section .bss
+    name resb 100
+
+
+
+
+
+section .data
+    message db "Hello, ", 0
+
+
+
+
+
+section .text
+    global _start
+    extern _stdin
+    extern _stdout
+    extern _stdoutLn
+
+
+
+_start:
+    lea rdi, [name]
+    call _stdin 
+
+    mov rsi, message
+    call _stdout
+
+    mov rdi, name
+    call _stdoutLn
+
+    mov rax, 60
+    xor rdi, rdi
+    syscall 
+```
+
+Reduzimos o código de 33 para apenas 19 linhas, o que representa uma melhoria de aproximadamente 42%. <br><br>
+
+Se estiverem interessados, podem consultar o código-fonte da biblioteca clicando [aqui](https://github.com/Ismael-Moreira-Kt/NS-stdio). Por hoje é tudo. Até ao próximo post!
