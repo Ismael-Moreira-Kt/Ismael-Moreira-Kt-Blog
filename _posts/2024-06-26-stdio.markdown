@@ -1,8 +1,8 @@
 ---
 
 layout: post
-title: Como funcionam as bibliotecas STDio
-date: 2024-06-26 20:00:00 +0100
+title: "Como funcionam as bibliotecas STDio"
+date: 2024-06-26 20:05:39 +0100
 categories: NASM, Assembly
 
 ---
